@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>BlobTracker</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0f0f11;
+    color: #f0f0f2;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  header {
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid #2a2a30;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  header h1 {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+  }
+  header h1 span { color: #4f8ef7; }
+  .badge {
+    background: #1a2d55;
+    color: #4f8ef7;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+  }
+  .subtitle {
+    color: #80808a;
+    font-size: 12px;
+    margin-left: auto;
+  }
+
+  /* ── LAYOUT ── */
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 49px);
+  }
+
+  /* ── VIDEO AREA ── */
+  .video-wrap {
+    position: relative;
+    background: #000;
+    flex: 1;
+    min-height: 0;
+  }
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  canvas#overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  /* ── BLOB COUNT BADGE ── */
+  .blob-badge {
+    position: absolute;
+    top: 10px;
+    left: 12px;
+    background: rgba(0,0,0,0.6);
+    border: 1px solid #2a2a30;
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #00ff88;
+    backdrop-filter: blur(4px);
+  }
+
+  /* ── REC BADGE ── */
+  .rec-badge {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    background: rgba(255,69,58,0.85);
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    display: none;
+    align-items: center;
+    gap: 6px;
+  }
+  .rec-badge.active { display: flex; }
+  .rec-dot {
+    width: 8px; height: 8px;
+    background: #fff;
+    border-radius: 50%;
+    animation: blink 1s infinite;
+  }
+  @keyframes blink {
+    0%,100% { opacity: 1; }
+    50%      { opacity: 0; }
+  }
+
+  /* ── CONTROLS ── */
+  .controls {
+    background: #131316;
+    border-top: 1px solid #2a2a30;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow-y: auto;
+    max-height: 52vh;
+  }
+
+  /* ── BUTTON ROW ── */
+  .btn-row {
+    display: flex;
+    gap: 8px;
+  }
+  button {
+    flex: 1;
+    padding: 10px 8px;
+    border: none;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    font-family: inherit;
+  }
+  button:active { opacity: 0.75; }
+
+  .btn-cam-front {
+    background: #1e1e24;
+    color: #c0c0cc;
+    border: 1px solid #35353f;
+  }
+  .btn-cam-front.active {
+    background: #1a2d55;
+    color: #4f8ef7;
+    border-color: #4f8ef7;
+  }
+  .btn-cam-back {
+    background: #1e1e24;
+    color: #c0c0cc;
+    border: 1px solid #35353f;
+  }
+  .btn-cam-back.active {
+    background: #1a2d55;
+    color: #4f8ef7;
+    border-color: #4f8ef7;
+  }
+  .btn-record {
+    background: #0d2e14;
+    color: #2dce6e;
+    border: 1px solid #2dce6e;
+  }
+  .btn-record.recording {
+    background: #3d1210;
+    color: #ff453a;
+    border-color: #ff453a;
+  }
+  .btn-download {
+    background: #1e1e24;
+    color: #80808a;
+    border: 1px solid #35353f;
+  }
+  .btn-download.ready {
+    background: #0d2040;
+    color: #4f8ef7;
+    border-color: #4f8ef7;
+  }
+
+  /* ── SLIDERS ── */
+  .section-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.4px;
+    color: #80808a;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .slider-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .slider-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .slider-label {
+    font-size: 12px;
+    color: #c0c0cc;
+    width: 130px;
+    flex-shrink: 0;
+  }
+  input[type=range] {
+    flex: 1;
+    height: 4px;
+    accent-color: #4f8ef7;
+    cursor: pointer;
+  }
+  .slider-val {
+    font-size: 12px;
+    font-weight: 700;
+    color: #4f8ef7;
+    width: 32px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  /* ── TOGGLES ── */
+  .toggle-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .toggle-btn {
+    background: #1e1e24;
+    border: 1px solid #35353f;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    color: #80808a;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.15s;
+    flex: unset;
+  }
+  .toggle-btn.on {
+    border-color: currentColor;
+    background: #1a1a2e;
+  }
+  .toggle-btn.on.trail  { color: #00ff88; background: #001a0d; }
+  .toggle-btn.on.para   { color: #ffaa00; background: #1a1100; }
+  .toggle-btn.on.grad   { color: #00cfff; background: #001a22; }
+  .toggle-btn.on.flow   { color: #bb88ff; background: #150a22; }
+  .toggle-btn.on.hull   { color: #ff8844; background: #1a0a00; }
+  .toggle-btn.on.heat   { color: #ff4444; background: #1a0000; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>BLOB<span>TRACKER</span></h1>
+  <span class="badge">v10</span>
+  <span class="subtitle" id="fps-label">— fps</span>
+</header>
+
+<div class="app">
+
+  <!-- VIDEO -->
+  <div class="video-wrap">
+    <video id="vid" autoplay playsinline muted></video>
+    <canvas id="overlay"></canvas>
+    <div class="blob-badge" id="blob-badge">0 blobs</div>
+    <div class="rec-badge" id="rec-badge">
+      <div class="rec-dot"></div> REC
+    </div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="controls">
+
+    <!-- Camera + Record + Download -->
+    <div class="btn-row">
+      <button class="btn-cam-front active" id="btn-front"
+              onclick="switchCamera('user')">
+        📷 Front
+      </button>
+      <button class="btn-cam-back" id="btn-back"
+              onclick="switchCamera('environment')">
+        🔭 Back
+      </button>
+      <button class="btn-record" id="btn-record"
+              onclick="toggleRecord()">
+        ⏺ Record
+      </button>
+      <button class="btn-download" id="btn-download"
+              onclick="downloadRecording()">
+        ⬇ Save
+      </button>
+    </div>
+
+    <!-- Sensitivity slider -->
+    <div>
+      <div class="section-title">Detection</div>
+      <div class="slider-row">
+        <div class="slider-item">
+          <span class="slider-label">Sensitivity</span>
+          <input type="range" id="sl-sensitivity"
+                 min="1" max="50" value="15"
+                 oninput="updateVal('sensitivity',this.value)">
+          <span class="slider-val" id="val-sensitivity">15</span>
+        </div>
+        <div class="slider-item">
+          <span class="slider-label">Min Blob (px²)</span>
+          <input type="range" id="sl-minsize"
+                 min="0" max="3000" value="200" step="50"
+                 oninput="updateVal('minsize',this.value)">
+          <span class="slider-val" id="val-minsize">200</span>
+        </div>
+        <div class="slider-item">
+          <span class="slider-label">Max Blob (px²)</span>
+          <input type="range" id="sl-maxsize"
+                 min="500" max="30000" value="15000" step="500"
+                 oninput="updateVal('maxsize',this.value)">
+          <span class="slider-val" id="val-maxsize">15000</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Overlay toggles -->
+    <div>
+      <div class="section-title">Overlays</div>
+      <div class="toggle-grid">
+        <button class="toggle-btn trail" id="tog-trail"
+                onclick="toggle('trail')">
+          🟢 Trail Lines
+        </button>
+        <button class="toggle-btn para" id="tog-para"
+                onclick="toggle('para')">
+          🟠 Parabola
+        </button>
+        <button class="toggle-btn grad" id="tog-grad"
+                onclick="toggle('grad')">
+          🔵 Gradient
+        </button>
+        <button class="toggle-btn flow" id="tog-flow"
+                onclick="toggle('flow')">
+          🟣 Opt. Flow
+        </button>
+        <button class="toggle-btn hull" id="tog-hull"
+                onclick="toggle('hull')">
+          🟤 Hull+Web
+        </button>
+        <button class="toggle-btn heat" id="tog-heat"
+                onclick="toggle('heat')">
+          🔴 Heatmap
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────
+const TRAIL_LEN = 300;
+let   facingMode  = 'user';
+let   stream      = null;
+let   animFrame   = null;
+let   prevFrame   = null;   // ImageData for frame diff
+let   blobTrails  = {};     // id → [{x,y}]
+let   nextId      = 0;
+let   recording   = false;
+let   mediaRec    = null;
+let   recChunks   = [];
+let   recBlob     = null;
+let   lastTime    = performance.now();
+let   frameCount  = 0;
+let   fps         = 0;
+
+// Overlay toggles
+const overlays = {
+  trail: false,
+  para:  false,
+  grad:  false,
+  flow:  false,
+  hull:  false,
+  heat:  false,
+};
+
+// Slider values
+const sliders = {
+  sensitivity: 15,
+  minsize:     200,
+  maxsize:     15000,
+};
+
+// Prev gray for optical flow (Float32Array)
+let prevGrayFlow = null;
+
+// ─────────────────────────────────────────────
+// CAMERA
+// ─────────────────────────────────────────────
+const vid = document.getElementById('vid');
+const cvs = document.getElementById('overlay');
+const ctx = cvs.getContext('2d', { willReadFrequently: true });
+
+async function startCamera(facing) {
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: facing },
+        width:  { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+      audio: false,
+    });
+    vid.srcObject = stream;
+    await vid.play();
+    facingMode = facing;
+    document.getElementById('btn-front').classList.toggle('active', facing === 'user');
+    document.getElementById('btn-back').classList.toggle('active',  facing === 'environment');
+    // Reset state on camera switch
+    prevFrame    = null;
+    prevGrayFlow = null;
+    blobTrails   = {};
+  } catch(e) {
+    alert('Camera error: ' + e.message +
+          '\nMake sure you are on HTTPS and allowed camera access.');
+  }
+}
+
+function switchCamera(facing) {
+  startCamera(facing);
+}
+
+// ─────────────────────────────────────────────
+// RECORDING
+// ─────────────────────────────────────────────
+function toggleRecord() {
+  if (!recording) {
+    startRecording();
+  } else {
+    stopRecording();
+  }
+}
+
+function startRecording() {
+  recChunks = [];
+  recBlob   = null;
+
+  // Record the overlay canvas (has blobs drawn on it)
+  const canvasStream = cvs.captureStream(30);
+
+  // Also mix in audio-less video track from camera
+  // so recording shows the actual video + overlay
+  const combinedStream = new MediaStream([
+    ...stream.getVideoTracks(),
+    ...canvasStream.getVideoTracks(),
+  ]);
+
+  // Record the overlay canvas stream directly
+  // (shows processed output with blobs)
+  try {
+    mediaRec = new MediaRecorder(cvs.captureStream(30), {
+      mimeType: 'video/webm;codecs=vp9',
+    });
+  } catch(e) {
+    // Fallback for Safari
+    mediaRec = new MediaRecorder(cvs.captureStream(30));
+  }
+
+  mediaRec.ondataavailable = e => {
+    if (e.data && e.data.size > 0) {
+      recChunks.push(e.data);
+    }
+  };
+
+  mediaRec.onstop = () => {
+    recBlob = new Blob(recChunks, { type: 'video/webm' });
+    const btn = document.getElementById('btn-download');
+    btn.classList.add('ready');
+    btn.textContent = '⬇ Save';
+  };
+
+  mediaRec.start(100);
+  recording = true;
+
+  document.getElementById('btn-record').classList.add('recording');
+  document.getElementById('btn-record').textContent = '⏹ Stop';
+  document.getElementById('rec-badge').classList.add('active');
+}
+
+function stopRecording() {
+  if (mediaRec && mediaRec.state !== 'inactive') {
+    mediaRec.stop();
+  }
+  recording = false;
+  document.getElementById('btn-record').classList.remove('recording');
+  document.getElementById('btn-record').textContent = '⏺ Record';
+  document.getElementById('rec-badge').classList.remove('active');
+}
+
+function downloadRecording() {
+  if (!recBlob) {
+    alert('No recording yet — press Record first.');
+    return;
+  }
+  const url = URL.createObjectURL(recBlob);
+  const a   = document.createElement('a');
+  a.href    = url;
+  a.download = 'blob-tracker-' +
+               new Date().toISOString().slice(0,19)
+                          .replace(/:/g,'-') +
+               '.webm';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─────────────────────────────────────────────
+// UI HELPERS
+// ─────────────────────────────────────────────
+function updateVal(key, val) {
+  sliders[key] = parseFloat(val);
+  document.getElementById('val-' + key).textContent = val;
+}
+
+function toggle(key) {
+  overlays[key] = !overlays[key];
+  const btn = document.getElementById('tog-' + key);
+  btn.classList.toggle('on', overlays[key]);
+}
+
+// ─────────────────────────────────────────────
+// BLOB MATCHING
+// ─────────────────────────────────────────────
+function matchBlobs(prevTrails, newCentroids) {
+  const updated  = {};
+  const used     = new Set();
+  const maxDist  = 80;
+
+  for (const [cx, cy] of newCentroids) {
+    let bestId   = null;
+    let bestDist = maxDist;
+
+    for (const [tid, trail] of Object.entries(prevTrails)) {
+      if (used.has(tid) || trail.length === 0) continue;
+      const last = trail[trail.length - 1];
+      const d    = Math.hypot(cx - last.x, cy - last.y);
+      if (d < bestDist) {
+        bestDist = d;
+        bestId   = tid;
+      }
+    }
+
+    if (bestId !== null) {
+      used.add(bestId);
+      const t = prevTrails[bestId];
+      t.push({ x: cx, y: cy });
+      if (t.length > TRAIL_LEN) t.shift();
+      updated[bestId] = t;
+    } else {
+      updated[nextId] = [{ x: cx, y: cy }];
+      nextId++;
+    }
+  }
+  return updated;
+}
+
+// ─────────────────────────────────────────────
+// FRAME DIFFERENCING
+// Returns motion mask as Uint8ClampedArray (1 channel)
+// ─────────────────────────────────────────────
+function getMotionMask(currData, prevData, w, h, thresh) {
+  const mask = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const p  = i * 4;
+    // Luminance of current
+    const lc = 0.299*currData[p] +
+               0.587*currData[p+1] +
+               0.114*currData[p+2];
+    // Luminance of previous
+    const lp = 0.299*prevData[p] +
+               0.587*prevData[p+1] +
+               0.114*prevData[p+2];
+    mask[i]  = Math.abs(lc - lp) > thresh ? 255 : 0;
+  }
+  return mask;
+}
+
+// Simple 2D morphological dilation on mask
+function dilateMask(mask, w, h, r) {
+  const out = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let found = false;
+      outer:
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const nx = x+dx, ny = y+dy;
+          if (nx<0||nx>=w||ny<0||ny>=h) continue;
+          if (mask[ny*w+nx] === 255) {
+            found = true; break outer;
+          }
+        }
+      }
+      out[y*w+x] = found ? 255 : 0;
+    }
+  }
+  return out;
+}
+
+// ─────────────────────────────────────────────
+// FIND BLOBS in binary mask using connected components
+// Returns array of {x,y,w,h,cx,cy,area}
+// ─────────────────────────────────────────────
+function findBlobs(mask, w, h, minArea, maxArea) {
+  const visited = new Uint8Array(w * h);
+  const blobs   = [];
+
+  for (let sy = 0; sy < h; sy++) {
+    for (let sx = 0; sx < w; sx++) {
+      const si = sy * w + sx;
+      if (mask[si] !== 255 || visited[si]) continue;
+
+      // BFS flood fill
+      const queue = [si];
+      visited[si] = 1;
+      let minX=sx, maxX=sx, minY=sy, maxY=sy;
+      let pixels = 0;
+
+      while (queue.length > 0) {
+        const idx = queue.shift();
+        const qx  = idx % w;
+        const qy  = (idx - qx) / w;
+        pixels++;
+        if (qx < minX) minX = qx;
+        if (qx > maxX) maxX = qx;
+        if (qy < minY) minY = qy;
+        if (qy > maxY) maxY = qy;
+
+        const neighbors = [
+          idx-1, idx+1, idx-w, idx+w
+        ];
+        for (const n of neighbors) {
+          if (n < 0 || n >= w*h) continue;
+          if (visited[n] || mask[n] !== 255) continue;
+          visited[n] = 1;
+          queue.push(n);
+        }
+      }
+
+      const bw   = maxX - minX + 1;
+      const bh   = maxY - minY + 1;
+      const area = pixels;
+      if (area < minArea || area > maxArea) continue;
+
+      blobs.push({
+        x:  minX, y: minY,
+        w:  bw,   h: bh,
+        cx: Math.round(minX + bw/2),
+        cy: Math.round(minY + bh/2),
+        area,
+      });
+    }
+  }
+  return blobs;
+}
+
+// ─────────────────────────────────────────────
+// CONTRAST COLOR — vivid, readable on any bg
+// ─────────────────────────────────────────────
+function contrastColor(imgData, x, y, bw, bh, W, H) {
+  let sum = 0, count = 0;
+  const x1 = Math.max(0, x);
+  const x2 = Math.min(W, x + bw);
+  const y1 = Math.max(0, y - 10);
+  const y2 = Math.min(H, y + 4);
+  for (let iy = y1; iy < y2; iy++) {
+    for (let ix = x1; ix < x2; ix++) {
+      const p = (iy * W + ix) * 4;
+      sum += 0.299*imgData[p] +
+             0.587*imgData[p+1] +
+             0.114*imgData[p+2];
+      count++;
+    }
+  }
+  if (count === 0) return '#00f5ff';
+  return (sum / count) < 128 ? '#00f5ff' : '#3c14dc';
+}
+
+// ─────────────────────────────────────────────
+// DRAW OVERLAYS
+// ─────────────────────────────────────────────
+function drawTrails(ctx2, trails) {
+  ctx2.strokeStyle = '#00ff88';
+  ctx2.lineWidth   = 1;
+  ctx2.globalAlpha = 0.65;
+  for (const trail of Object.values(trails)) {
+    if (trail.length < 2) continue;
+    ctx2.beginPath();
+    ctx2.moveTo(trail[0].x, trail[0].y);
+    for (let i = 1; i < trail.length; i++) {
+      ctx2.lineTo(trail[i].x, trail[i].y);
+    }
+    ctx2.stroke();
+  }
+  ctx2.globalAlpha = 1;
+}
+
+function drawParabola(ctx2, trail, W, H) {
+  if (trail.length < 6) return;
+  const xs = trail.map(p => p.x);
+  const ys = trail.map(p => p.y);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = Math.min(...ys), yMax = Math.max(...ys);
+  if (xMax - xMin < 10 || yMax - yMin < 3) return;
+
+  // Least squares parabola fit
+  let sx=0, sx2=0, sx3=0, sx4=0, sy=0, sxy=0, sx2y=0;
+  const n = trail.length;
+  for (const p of trail) {
+    const x=p.x, y=p.y;
+    sx+=x; sx2+=x*x; sx3+=x*x*x; sx4+=x*x*x*x;
+    sy+=y; sxy+=x*y; sx2y+=x*x*y;
+  }
+  // Solve 3x3 system [sx4 sx3 sx2; sx3 sx2 sx; sx2 sx n] * [a,b,c] = [sx2y, sxy, sy]
+  const A = [
+    [sx4,sx3,sx2],
+    [sx3,sx2,sx],
+    [sx2,sx,  n],
+  ];
+  const B = [sx2y, sxy, sy];
+
+  function det3(m) {
+    return m[0][0]*(m[1][1]*m[2][2]-m[1][2]*m[2][1])
+          -m[0][1]*(m[1][0]*m[2][2]-m[1][2]*m[2][0])
+          +m[0][2]*(m[1][0]*m[2][1]-m[1][1]*m[2][0]);
+  }
+  const dA = det3(A);
+  if (Math.abs(dA) < 1e-10) return;
+
+  function replaceCol(M, col, v) {
+    return M.map((row,i) => row.map((c,j) => j===col ? v[i] : c));
+  }
+  const a = det3(replaceCol(A,0,B)) / dA;
+  const b = det3(replaceCol(A,1,B)) / dA;
+  const c = det3(replaceCol(A,2,B)) / dA;
+
+  const ext  = Math.max(20, (xMax-xMin)>>1);
+  const xS   = Math.max(0, xMin-ext);
+  const xE   = Math.min(W, xMax+ext);
+
+  ctx2.strokeStyle = '#ffaa00';
+  ctx2.lineWidth   = 1;
+  ctx2.setLineDash([4, 4]);
+  ctx2.beginPath();
+  let started = false;
+  for (let x = xS; x <= xE; x += 3) {
+    const y = a*x*x + b*x + c;
+    if (y < 0 || y > H) { started = false; continue; }
+    if (!started) { ctx2.moveTo(x, y); started = true; }
+    else          { ctx2.lineTo(x, y); }
+  }
+  ctx2.stroke();
+  ctx2.setLineDash([]);
+
+  // Prediction dot
+  const nx = xMax + ((xMax-xMin)>>2);
+  if (nx >= 0 && nx < W) {
+    const ny = a*nx*nx + b*nx + c;
+    if (ny >= 0 && ny < H) {
+      ctx2.fillStyle = '#ffaa00';
+      ctx2.beginPath();
+      ctx2.arc(nx, ny, 4, 0, Math.PI*2);
+      ctx2.fill();
+      ctx2.fillStyle = '#ffaa00';
+      ctx2.font = '10px -apple-system, sans-serif';
+      ctx2.fillText('pred', nx+6, ny);
+    }
+  }
+}
+
+function drawGradient(ctx2, cx, cy, trail) {
+  if (trail.length < 3) return;
+  const n  = Math.min(5, trail.length-1);
+  let vx=0, vy=0;
+  for (let i=1; i<=n; i++) {
+    vx += trail[trail.length-i].x - trail[trail.length-i-1].x;
+    vy += trail[trail.length-i].y - trail[trail.length-i-1].y;
+  }
+  vx /= n; vy /= n;
+  const spd = Math.hypot(vx, vy);
+  if (spd < 0.5) return;
+  const sc = Math.min(4, Math.max(1, 40/(spd+1)));
+  const ex = cx + vx*sc;
+  const ey = cy + vy*sc;
+
+  ctx2.strokeStyle = '#00cfff';
+  ctx2.fillStyle   = '#00cfff';
+  ctx2.lineWidth   = 2;
+  drawArrow(ctx2, cx, cy, ex, ey);
+
+  ctx2.font      = '10px -apple-system, sans-serif';
+  ctx2.fillStyle = '#00cfff';
+  ctx2.fillText(spd.toFixed(1)+'px/f', ex+6, ey-4);
+}
+
+function drawArrow(ctx2, x1, y1, x2, y2) {
+  const angle  = Math.atan2(y2-y1, x2-x1);
+  const tipLen = 8;
+  ctx2.beginPath();
+  ctx2.moveTo(x1, y1);
+  ctx2.lineTo(x2, y2);
+  ctx2.stroke();
+  ctx2.beginPath();
+  ctx2.moveTo(x2, y2);
+  ctx2.lineTo(x2 - tipLen*Math.cos(angle-0.4),
+              y2 - tipLen*Math.sin(angle-0.4));
+  ctx2.lineTo(x2 - tipLen*Math.cos(angle+0.4),
+              y2 - tipLen*Math.sin(angle+0.4));
+  ctx2.closePath();
+  ctx2.fill();
+}
+
+function drawOptFlow(ctx2, curr, prev, W, H) {
+  if (!prev) return;
+  const step = 24;
+  ctx2.strokeStyle = '#bb88ff';
+  ctx2.fillStyle   = '#bb88ff';
+  ctx2.lineWidth   = 1;
+
+  for (let y = step; y < H-step; y += step) {
+    for (let x = step; x < W-step; x += step) {
+      const p   = (y*W+x)*4;
+      const lc  = 0.299*curr[p]+0.587*curr[p+1]+0.114*curr[p+2];
+      const lp  = 0.299*prev[p]+0.587*prev[p+1]+0.114*prev[p+2];
+      const mag = Math.abs(lc-lp);
+      if (mag < 8) continue;
+      // Estimate local flow direction from gradient
+      const pr  = (y*W+Math.min(W-1,x+2))*4;
+      const lcr = 0.299*curr[pr]+0.587*curr[pr+1]+0.114*curr[pr+2];
+      const lpr = 0.299*prev[pr]+0.587*prev[pr+1]+0.114*prev[pr+2];
+      const pb  = (Math.min(H-1,y+2)*W+x)*4;
+      const lcb = 0.299*curr[pb]+0.587*curr[pb+1]+0.114*curr[pb+2];
+      const lpb = 0.299*prev[pb]+0.587*prev[pb+1]+0.114*prev[pb+2];
+      const dx  = (lcr-lpr) * 0.5;
+      const dy  = (lcb-lpb) * 0.5;
+      const len = Math.hypot(dx,dy);
+      if (len < 0.5) continue;
+      const scale = Math.min(12, mag*0.3);
+      drawArrow(ctx2, x, y,
+                x + (dx/len)*scale,
+                y + (dy/len)*scale);
+    }
+  }
+}
+
+function drawHullWeb(ctx2, blobs) {
+  if (blobs.length < 2) return;
+  const cx = blobs.reduce((s,b) => s+b.cx, 0) / blobs.length;
+  const cy = blobs.reduce((s,b) => s+b.cy, 0) / blobs.length;
+
+  ctx2.strokeStyle = '#ff8844';
+  ctx2.fillStyle   = '#ff8844';
+  ctx2.lineWidth   = 1;
+
+  // Web lines
+  for (const b of blobs) {
+    ctx2.beginPath();
+    ctx2.moveTo(b.cx, b.cy);
+    ctx2.lineTo(cx, cy);
+    ctx2.stroke();
+  }
+  // Group centroid
+  ctx2.beginPath();
+  ctx2.arc(cx, cy, 5, 0, Math.PI*2);
+  ctx2.fill();
+  ctx2.font      = '11px -apple-system, sans-serif';
+  ctx2.fillText('G', cx+7, cy+4);
+
+  // Convex hull (gift wrapping)
+  if (blobs.length >= 3) {
+    const pts = blobs.map(b => [b.cx, b.cy]);
+    const hull = convexHull(pts);
+    if (hull.length >= 3) {
+      ctx2.beginPath();
+      ctx2.moveTo(hull[0][0], hull[0][1]);
+      for (let i=1; i<hull.length; i++) {
+        ctx2.lineTo(hull[i][0], hull[i][1]);
+      }
+      ctx2.closePath();
+      ctx2.stroke();
+    }
+  }
+}
+
+function convexHull(pts) {
+  const n = pts.length;
+  if (n < 3) return pts;
+  pts = pts.slice().sort((a,b) => a[0]-b[0] || a[1]-b[1]);
+  const lower = [];
+  for (const p of pts) {
+    while (lower.length>=2 &&
+           cross(lower[lower.length-2],
+                 lower[lower.length-1], p) <= 0) {
+      lower.pop();
+    }
+    lower.push(p);
+  }
+  const upper = [];
+  for (let i=pts.length-1; i>=0; i--) {
+    const p = pts[i];
+    while (upper.length>=2 &&
+           cross(upper[upper.length-2],
+                 upper[upper.length-1], p) <= 0) {
+      upper.pop();
+    }
+    upper.push(p);
+  }
+  return lower.slice(0,-1).concat(upper.slice(0,-1));
+}
+function cross(O,A,B) {
+  return (A[0]-O[0])*(B[1]-O[1]) -
+         (A[1]-O[1])*(B[0]-O[0]);
+}
+
+function drawHeatmap(ctx2, blobs, trails) {
+  const speeds = [];
+  for (const b of blobs) {
+    const tid   = findTid(b.cx, b.cy);
+    const trail = tid !== null ? blobTrails[tid] : [];
+    if (trail && trail.length >= 2) {
+      const n = Math.min(5, trail.length-1);
+      let vx=0, vy=0;
+      for (let i=1; i<=n; i++) {
+        vx += trail[trail.length-i].x - trail[trail.length-i-1].x;
+        vy += trail[trail.length-i].y - trail[trail.length-i-1].y;
+      }
+      speeds.push(Math.hypot(vx/n, vy/n));
+    } else {
+      speeds.push(0);
+    }
+  }
+  const maxSpd = Math.max(...speeds, 1);
+  ctx2.globalAlpha = 0.35;
+  for (let i=0; i<blobs.length; i++) {
+    const t   = speeds[i] / maxSpd;
+    const r   = t < 0.5 ? 0           : Math.round(255*(t-0.5)*2);
+    const g   = t < 0.5 ? Math.round(255*t*2) : Math.round(255*(1-(t-0.5)*2));
+    const b   = t < 0.5 ? Math.round(255*(1-t*2)) : 0;
+    const rad = 20 + t*40;
+    const grd = ctx2.createRadialGradient(
+      blobs[i].cx, blobs[i].cy, 0,
+      blobs[i].cx, blobs[i].cy, rad);
+    grd.addColorStop(0,   `rgba(${r},${g},${b},1)`);
+    grd.addColorStop(1,   `rgba(${r},${g},${b},0)`);
+    ctx2.fillStyle = grd;
+    ctx2.beginPath();
+    ctx2.arc(blobs[i].cx, blobs[i].cy, rad, 0, Math.PI*2);
+    ctx2.fill();
+  }
+  ctx2.globalAlpha = 1;
+}
+
+function findTid(cx, cy) {
+  let best=null, bestD=40;
+  for (const [tid, trail] of Object.entries(blobTrails)) {
+    if (!trail.length) continue;
+    const last = trail[trail.length-1];
+    const d    = Math.hypot(cx-last.x, cy-last.y);
+    if (d < bestD) { bestD=d; best=tid; }
+  }
+  return best;
+}
+
+// ─────────────────────────────────────────────
+// MAIN LOOP
+// ─────────────────────────────────────────────
+// Offscreen canvas for pixel reading
+const offCvs = document.createElement('canvas');
+const offCtx = offCvs.getContext('2d', { willReadFrequently: true });
+
+function loop() {
+  animFrame = requestAnimationFrame(loop);
+
+  if (!vid.videoWidth || vid.readyState < 2) return;
+
+  const W = vid.videoWidth;
+  const H = vid.videoHeight;
+
+  // Sync canvas sizes
+  if (cvs.width !== W || cvs.height !== H) {
+    cvs.width  = W;
+    cvs.height = H;
+    offCvs.width  = W;
+    offCvs.height = H;
+  }
+
+  // Draw current video frame to offscreen canvas
+  offCtx.drawImage(vid, 0, 0, W, H);
+  const currData = offCtx.getImageData(0, 0, W, H);
+
+  // FPS counter
+  frameCount++;
+  const now = performance.now();
+  if (now - lastTime >= 1000) {
+    fps = frameCount;
+    frameCount = 0;
+    lastTime   = now;
+    document.getElementById('fps-label').textContent =
+      fps + ' fps';
+  }
+
+  // ── MOTION DETECTION ──────────────────────
+  const sensitivity = sliders.sensitivity;
+  const minSize     = sliders.minsize;
+  const maxSize     = sliders.maxsize;
+  const thresh      = Math.max(1, 60 - sensitivity);
+
+  let blobs = [];
+
+  if (prevFrame) {
+    let mask = getMotionMask(
+      currData.data, prevFrame.data, W, H, thresh);
+    mask     = dilateMask(mask, W, H, 4);
+    blobs    = findBlobs(mask, W, H, minSize, maxSize);
+  }
+
+  // Update previous frame (slow decay)
+  if (!prevFrame) {
+    prevFrame = currData;
+  } else {
+    // Blend: prev = prev*0.7 + curr*0.3
+    for (let i=0; i<currData.data.length; i++) {
+      prevFrame.data[i] = prevFrame.data[i]*0.7 +
+                          currData.data[i]*0.3;
+    }
+  }
+
+  // Update trails
+  const centroids = blobs.map(b => [b.cx, b.cy]);
+  blobTrails      = matchBlobs(blobTrails, centroids);
+
+  // ── DRAW ──────────────────────────────────
+  ctx.clearRect(0, 0, W, H);
+
+  // Draw video frame onto overlay canvas
+  // so recording captures video+overlay together
+  ctx.drawImage(vid, 0, 0, W, H);
+
+  // Heatmap (behind everything)
+  if (overlays.heat && blobs.length > 0) {
+    drawHeatmap(ctx, blobs, blobTrails);
+  }
+
+  // Optical flow
+  if (overlays.flow && prevGrayFlow) {
+    drawOptFlow(ctx, currData.data, prevGrayFlow, W, H);
+  }
+
+  // Convex hull + web
+  if (overlays.hull && blobs.length >= 2) {
+    drawHullWeb(ctx, blobs);
+  }
+
+  // Trails
+  if (overlays.trail) {
+    drawTrails(ctx, blobTrails);
+  }
+
+  // Per-blob overlays + boxes
+  const overlapSet = new Set();
+  for (let i=0; i<blobs.length; i++) {
+    for (let j=i+1; j<blobs.length; j++) {
+      const a=blobs[i], b=blobs[j];
+      if (a.x < b.x+b.w && a.x+a.w > b.x &&
+          a.y < b.y+b.h && a.y+a.h > b.y) {
+        overlapSet.add(i); overlapSet.add(j);
+      }
+    }
+  }
+
+  for (let i=0; i<blobs.length; i++) {
+    const b   = blobs[i];
+    const tid = findTid(b.cx, b.cy);
+    const trail = tid !== null ? blobTrails[tid] : [];
+
+    // Math overlays
+    if (overlays.para && trail.length >= 6)
+      drawParabola(ctx, trail, W, H);
+    if (overlays.grad && trail.length >= 3)
+      drawGradient(ctx, b.cx, b.cy, trail);
+
+    // Box color
+    const isOv  = overlapSet.has(i);
+    const color = isOv ? '#ff453a'
+                       : contrastColor(currData.data,
+                                       b.x, b.y, b.w, b.h,
+                                       W, H);
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 1;
+    ctx.strokeRect(b.x, b.y, b.w, b.h);
+
+    // Corner ticks
+    const t = 10;
+    ctx.lineWidth = 2;
+    const corners = [
+      [b.x,b.y,1,1], [b.x+b.w,b.y,-1,1],
+      [b.x,b.y+b.h,1,-1], [b.x+b.w,b.y+b.h,-1,-1],
+    ];
+    for (const [cx2,cy2,dx,dy] of corners) {
+      ctx.beginPath();
+      ctx.moveTo(cx2, cy2);
+      ctx.lineTo(cx2+dx*t, cy2);
+      ctx.moveTo(cx2, cy2);
+      ctx.lineTo(cx2, cy2+dy*t);
+      ctx.stroke();
+    }
+
+    // Overlap label
+    if (isOv) {
+      ctx.fillStyle = '#ff453a';
+      ctx.font      = '11px -apple-system, sans-serif';
+      ctx.fillText('OVERLAP', b.x, b.y - 6);
+    }
+
+    // Position label — no background box
+    const lbl = `#${i+1}  ${b.cx},${b.cy}`;
+    let lx    = b.x + b.w + 8;
+    const ly  = b.y + 14;
+    ctx.font  = '11px -apple-system, sans-serif';
+    const tw  = ctx.measureText(lbl).width;
+    if (lx + tw > W) lx = b.x - tw - 8;
+    ctx.fillStyle = color;
+    ctx.fillText(lbl, lx, ly);
+  }
+
+  // Save prev gray for optical flow
+  prevGrayFlow = currData.data.slice();
+
+  // Update blob count
+  document.getElementById('blob-badge').textContent =
+    blobs.length + (blobs.length===1 ? ' blob' : ' blobs');
+}
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
+startCamera('user').then(() => {
+  loop();
+});
+</script>
+</body>
+</html>
